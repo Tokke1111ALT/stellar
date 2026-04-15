@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Rocket Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --accent: #e94560;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0a0;
+            --border-color: #2a2a4a;
+            --selected-bg: #2d2d5a;
+            --hover-bg: #3a3a6a;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            height: 50px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            gap: 10px;
+        }
+
+        .tool-btn {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+
+        .tool-btn:hover {
+            background: var(--hover-bg);
+        }
+
+        .tool-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .separator {
+            width: 1px;
+            height: 30px;
+            background: var(--border-color);
+            margin: 0 5px;
+        }
+
+        /* Main Layout */
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebars */
+        .sidebar {
+            width: 250px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            transition: width 0.3s ease;
+        }
+
+        .sidebar.right {
+            border-right: none;
+            border-left: 1px solid var(--border-color);
+        }
+
+        .sidebar.collapsed {
+            width: 0;
+            overflow: hidden;
+        }
+
+        .sidebar-header {
+            padding: 12px 15px;
+            background: var(--bg-tertiary);
+            font-weight: 600;
+            font-size: 14px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* Hierarchy Panel */
+        .hierarchy-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .hierarchy-item {
+            padding: 8px 12px;
+            margin: 2px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+
+        .hierarchy-item:hover {
+            background: var(--hover-bg);
+        }
+
+        .hierarchy-item.selected {
+            background: var(--selected-bg);
+            border-left: 3px solid var(--accent);
+        }
+
+        .hierarchy-item img {
+            width: 20px;
+            height: 20px;
+            object-fit: contain;
+        }
+
+        /* Canvas Area */
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            background: #0a0a1a;
+            overflow: hidden;
+        }
+
+        .canvas-wrapper {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            cursor: grab;
+        }
+
+        .canvas-wrapper:active {
+            cursor: grabbing;
+        }
+
+        /* Grid Background */
+        .grid-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+        }
+
+        /* Parts on Canvas */
+        .canvas-part {
+            position: absolute;
+            cursor: move;
+            transition: box-shadow 0.2s;
+            user-select: none;
+        }
+
+        .canvas-part img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            pointer-events: none;
+        }
+
+        .canvas-part.selected {
+            outline: 2px solid var(--accent);
+            outline-offset: 2px;
+        }
+
+        /* Transform Controls */
+        .transform-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: var(--accent);
+            border: 2px solid white;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .transform-handle.nw { top: -6px; left: -6px; cursor: nw-resize; }
+        .transform-handle.ne { top: -6px; right: -6px; cursor: ne-resize; }
+        .transform-handle.sw { bottom: -6px; left: -6px; cursor: sw-resize; }
+        .transform-handle.se { bottom: -6px; right: -6px; cursor: se-resize; }
+        .transform-handle.n { top: -6px; left: 50%; transform: translateX(-50%); cursor: n-resize; }
+        .transform-handle.s { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
+        .transform-handle.e { right: -6px; top: 50%; transform: translateY(-50%); cursor: e-resize; }
+        .transform-handle.w { left: -6px; top: 50%; transform: translateY(-50%); cursor: w-resize; }
+
+        .rotate-handle {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 20px;
+            height: 20px;
+            background: var(--accent);
+            border: 2px solid white;
+            border-radius: 50%;
+            cursor: grab;
+            z-index: 10;
+        }
+
+        .rotate-line {
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            width: 2px;
+            height: 30px;
+            background: var(--accent);
+            transform: translateX(-50%);
+            z-index: 9;
+        }
+
+        /* Properties Panel */
+        .properties-content {
+            padding: 15px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .property-group {
+            margin-bottom: 20px;
+        }
+
+        .property-group-title {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .property-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            gap: 10px;
+        }
+
+        .property-label {
+            width: 60px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .property-input {
+            flex: 1;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 6px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .property-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .property-unit {
+            width: 30px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* Parts Library */
+        .parts-library {
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            overflow-y: auto;
+        }
+
+        .part-item {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 8px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .part-item:hover {
+            background: var(--hover-bg);
+            border-color: var(--accent);
+        }
+
+        .part-item img {
+            width: 40px;
+            height: 40px;
+            object-fit: contain;
+            margin-bottom: 5px;
+        }
+
+        .part-item span {
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        /* Zen Mode */
+        .zen-mode .sidebar {
+            display: none;
+        }
+
+        .zen-mode .toolbar {
+            display: none;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary);
+        }
+
+        /* Context Menu */
+        .context-menu {
+            position: fixed;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 5px 0;
+            min-width: 150px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+
+        .context-menu-item {
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+
+        .context-menu-item:hover {
+            background: var(--hover-bg);
+        }
+
+        .context-menu-divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 5px 0;
+        }
+
+        /* Status Bar */
+        .status-bar {
+            height: 25px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            gap: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Toolbar -->
+    <div class="toolbar">
+        <button class="tool-btn active" data-tool="select" title="Select (Q)">Select</button>
+        <button class="tool-btn" data-tool="translate" title="Translate (W)">Translate</button>
+        <button class="tool-btn" data-tool="rotate" title="Rotate (E)">Rotate</button>
+        <button class="tool-btn" data-tool="scale" title="Scale (R)">Scale</button>
+        <div class="separator"></div>
+        <button class="tool-btn" id="addPartBtn">Add Part</button>
+        <button class="tool-btn" id="deleteBtn">Delete</button>
+        <div class="separator"></div>
+        <button class="tool-btn" id="zenModeBtn">Zen Mode</button>
+        <button class="tool-btn" id="resetViewBtn">Reset View</button>
+    </div>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Left Sidebar - Hierarchy -->
+        <div class="sidebar" id="leftSidebar">
+            <div class="sidebar-header">Hierarchy</div>
+            <div class="hierarchy-list" id="hierarchyList">
+                <!-- Items will be populated by JS -->
+            </div>
+        </div>
+
+        <!-- Canvas -->
+        <div class="canvas-container">
+            <div class="canvas-wrapper" id="canvasWrapper">
+                <div class="grid-background" id="gridBackground"></div>
+                <div id="canvasParts"></div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar - Properties & Parts -->
+        <div class="sidebar right" id="rightSidebar">
+            <div class="sidebar-header">Properties</div>
+            <div class="properties-content" id="propertiesContent">
+                <div class="property-group">
+                    <div class="property-group-title">Transform</div>
+                    <div class="property-row">
+                        <span class="property-label">Position</span>
+                        <input type="number" class="property-input" id="propX" placeholder="X">
+                        <input type="number" class="property-input" id="propY" placeholder="Y">
+                    </div>
+                    <div class="property-row">
+                        <span class="property-label">Rotation</span>
+                        <input type="number" class="property-input" id="propRotation" placeholder="°">
+                        <span class="property-unit">deg</span>
+                    </div>
+                    <div class="property-row">
+                        <span class="property-label">Scale</span>
+                        <input type="number" class="property-input" id="propScale" placeholder="%" step="10">
+                        <span class="property-unit">%</span>
+                    </div>
+                </div>
+                <div class="property-group">
+                    <div class="property-group-title">Info</div>
+                    <div class="property-row">
+                        <span class="property-label">Name</span>
+                        <input type="text" class="property-input" id="propName" style="flex: 2;">
+                    </div>
+                    <div class="property-row">
+                        <span class="property-label">Type</span>
+                        <span id="propType" style="font-size: 13px; color: var(--text-secondary);">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar-header" style="margin-top: auto; border-top: 1px solid var(--border-color);">Parts Library</div>
+            <div class="parts-library" id="partsLibrary">
+                <!-- Parts will be populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <span id="statusCoords">X: 0, Y: 0</span>
+        <span id="statusSelected">No selection</span>
+        <span id="statusZoom">Zoom: 100%</span>
+    </div>
+
+    <!-- Context Menu -->
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" data-action="duplicate">Duplicate</div>
+        <div class="context-menu-item" data-action="delete">Delete</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" data-action="bringToFront">Bring to Front</div>
+        <div class="context-menu-item" data-action="sendToBack">Send to Back</div>
+    </div>
+
+    <script>
+        // Part definitions with image paths from the repository
+        const partDefinitions = [
+            { id: 'fuelTank', name: 'Fuel Tank', width: 60, height: 120, image: './src/game/parts/FuelTank/textures/middle.png' },
+            { id: 'engineValiant', name: 'Engine Valiant', width: 70, height: 80, image: './src/game/parts/EngineValiant/texture.png' },
+            { id: 'engineFrontier', name: 'Engine Frontier', width: 65, height: 75, image: './src/game/parts/EngineFrontier/texture.png' },
+            { id: 'engineTitan', name: 'Engine Titan', width: 80, height: 90, image: './src/game/parts/EngineTitan/texture.png' },
+            { id: 'capsule', name: 'Capsule', width: 70, height: 60, image: './src/game/parts/Capsule/texture.png' },
+            { id: 'coneSide', name: 'Cone', width: 60, height: 50, image: './src/game/parts/ConeSide/texture.png' },
+            { id: 'heatShield', name: 'Heat Shield', width: 75, height: 30, image: './src/game/parts/HeatShield/texture.png' },
+            { id: 'parachute', name: 'Parachute', width: 50, height: 40, image: './src/game/parts/Parachute/texture.png' },
+            { id: 'fin', name: 'Fin', width: 40, height: 60, image: './src/game/parts/Strut/textures/strut-left.png' },
+            { id: 'rcs', name: 'RCS', width: 30, height: 30, image: './src/game/parts/RCS/texture.png' },
+            { id: 'separator', name: 'Separator', width: 60, height: 20, image: './src/game/parts/SideSeparator/texture.png' },
+            { id: 'placeholderIon', name: 'Ion Engine', width: 50, height: 70, image: './src/game/parts/PlaceholderIon/texture.png' }
+        ];
+
+        // State
+        let parts = [];
+        let selectedPartId = null;
+        let currentTool = 'select';
+        let isDragging = false;
+        let isResizing = false;
+        let isRotating = false;
+        let dragOffset = { x: 0, y: 0 };
+        let resizeHandle = null;
+        let initialSize = { width: 0, height: 0 };
+        let initialPos = { x: 0, y: 0 };
+        let canvasOffset = { x: 0, y: 0 };
+        let zoom = 1;
+        let isZenMode = false;
+        let zIndexCounter = 1;
+
+        // DOM Elements
+        const canvasWrapper = document.getElementById('canvasWrapper');
+        const canvasParts = document.getElementById('canvasParts');
+        const hierarchyList = document.getElementById('hierarchyList');
+        const partsLibrary = document.getElementById('partsLibrary');
+        const contextMenu = document.getElementById('contextMenu');
+        const gridBackground = document.getElementById('gridBackground');
+
+        // Property inputs
+        const propX = document.getElementById('propX');
+        const propY = document.getElementById('propY');
+        const propRotation = document.getElementById('propRotation');
+        const propScale = document.getElementById('propScale');
+        const propName = document.getElementById('propName');
+        const propType = document.getElementById('propType');
+
+        // Initialize
+        function init() {
+            renderPartsLibrary();
+            setupEventListeners();
+            updateGridPosition();
+            
+            // Add some initial parts
+            addPart(partDefinitions[0], 400, 300);
+            addPart(partDefinitions[3], 400, 420);
+            addPart(partDefinitions[4], 400, 180);
+        }
+
+        // Render parts library
+        function renderPartsLibrary() {
+            partsLibrary.innerHTML = '';
+            partDefinitions.forEach(part => {
+                const partEl = document.createElement('div');
+                partEl.className = 'part-item';
+                partEl.innerHTML = `
+                    <img src="${part.image}" alt="${part.name}" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 40 40%22><rect fill=%22%23444%22 width=%2240%22 height=%2240%22/><text x=%2220%22 y=%2225%22 text-anchor=%22middle%22 fill=%22%23888%22 font-size=%2210%22>${part.name.charAt(0)}</text></svg>'">
+                    <span>${part.name}</span>
+                `;
+                partEl.addEventListener('click', () => {
+                    const rect = canvasWrapper.getBoundingClientRect();
+                    addPart(part, rect.width / 2 - part.width / 2, rect.height / 2 - part.height / 2);
+                });
+                partsLibrary.appendChild(partEl);
+            });
+        }
+
+        // Add part to canvas
+        function addPart(definition, x, y) {
+            const part = {
+                id: 'part_' + Date.now(),
+                definitionId: definition.id,
+                name: definition.name,
+                x: x,
+                y: y,
+                width: definition.width,
+                height: definition.height,
+                rotation: 0,
+                scale: 100,
+                zIndex: zIndexCounter++
+            };
+            parts.push(part);
+            renderCanvas();
+            renderHierarchy();
+            selectPart(part.id);
+            return part;
+        }
+
+        // Render canvas
+        function renderCanvas() {
+            canvasParts.innerHTML = '';
+            parts.sort((a, b) => a.zIndex - b.zIndex).forEach(part => {
+                const partEl = document.createElement('div');
+                partEl.className = `canvas-part ${part.id === selectedPartId ? 'selected' : ''}`;
+                partEl.dataset.id = part.id;
+                partEl.style.left = `${part.x}px`;
+                partEl.style.top = `${part.y}px`;
+                partEl.style.width = `${part.width * (part.scale / 100)}px`;
+                partEl.style.height = `${part.height * (part.scale / 100)}px`;
+                partEl.style.transform = `rotate(${part.rotation}deg)`;
+                partEl.style.zIndex = part.zIndex;
+                
+                partEl.innerHTML = `
+                    <img src="${partDefinitions.find(d => d.id === part.definitionId)?.image || ''}" 
+                         alt="${part.name}"
+                         onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 ${part.width} ${part.height}%22><rect fill=%22%23444%22 width=%22${part.width}%22 height=%22${part.height}%22/><text x=%22${part.width/2}%22 y=%22${part.height/2}%22 text-anchor=%22middle%22 fill=%22%23888%22 font-size=%2214%22>${part.name.charAt(0)}</text></svg>'">
+                `;
+
+                // Add transform handles if selected and tool is scale
+                if (part.id === selectedPartId && currentTool === 'scale') {
+                    partEl.innerHTML += `
+                        <div class="rotate-line"></div>
+                        <div class="rotate-handle" data-action="rotate"></div>
+                        <div class="transform-handle nw" data-action="resize" data-handle="nw"></div>
+                        <div class="transform-handle ne" data-action="resize" data-handle="ne"></div>
+                        <div class="transform-handle sw" data-action="resize" data-handle="sw"></div>
+                        <div class="transform-handle se" data-action="resize" data-handle="se"></div>
+                        <div class="transform-handle n" data-action="resize" data-handle="n"></div>
+                        <div class="transform-handle s" data-action="resize" data-handle="s"></div>
+                        <div class="transform-handle e" data-action="resize" data-handle="e"></div>
+                        <div class="transform-handle w" data-action="resize" data-handle="w"></div>
+                    `;
+                }
+
+                // Add rotate handle if selected and tool is rotate
+                if (part.id === selectedPartId && currentTool === 'rotate') {
+                    partEl.innerHTML += `
+                        <div class="rotate-line"></div>
+                        <div class="rotate-handle" data-action="rotate"></div>
+                    `;
+                }
+
+                partEl.addEventListener('mousedown', (e) => handlePartMouseDown(e, part));
+                canvasParts.appendChild(partEl);
+            });
+        }
+
+        // Render hierarchy
+        function renderHierarchy() {
+            hierarchyList.innerHTML = '';
+            parts.sort((a, b) => b.zIndex - a.zIndex).forEach(part => {
+                const item = document.createElement('div');
+                item.className = `hierarchy-item ${part.id === selectedPartId ? 'selected' : ''}`;
+                item.dataset.id = part.id;
+                const def = partDefinitions.find(d => d.id === part.definitionId);
+                item.innerHTML = `
+                    <img src="${def?.image || ''}" alt="" onerror="this.style.display='none'">
+                    <span>${part.name}</span>
+                `;
+                item.addEventListener('click', () => selectPart(part.id));
+                hierarchyList.appendChild(item);
+            });
+        }
+
+        // Select part
+        function selectPart(partId) {
+            selectedPartId = partId;
+            renderCanvas();
+            renderHierarchy();
+            updatePropertiesPanel();
+            updateStatusBar();
+        }
+
+        // Update properties panel
+        function updatePropertiesPanel() {
+            const part = parts.find(p => p.id === selectedPartId);
+            if (part) {
+                propX.value = Math.round(part.x);
+                propY.value = Math.round(part.y);
+                propRotation.value = Math.round(part.rotation);
+                propScale.value = Math.round(part.scale);
+                propName.value = part.name;
+                propType.textContent = partDefinitions.find(d => d.id === part.definitionId)?.name || 'Unknown';
+            } else {
+                propX.value = '';
+                propY.value = '';
+                propRotation.value = '';
+                propScale.value = '';
+                propName.value = '';
+                propType.textContent = '-';
+            }
+        }
+
+        // Update status bar
+        function updateStatusBar() {
+            const selected = parts.find(p => p.id === selectedPartId);
+            document.getElementById('statusSelected').textContent = selected ? `Selected: ${selected.name}` : 'No selection';
+            document.getElementById('statusZoom').textContent = `Zoom: ${Math.round(zoom * 100)}%`;
+        }
+
+        // Handle part mouse down
+        function handlePartMouseDown(e, part) {
+            e.stopPropagation();
+            
+            if (e.target.dataset.action === 'resize') {
+                isResizing = true;
+                resizeHandle = e.target.dataset.handle;
+                initialSize = { width: part.width, height: part.height };
+                initialPos = { x: part.x, y: part.y };
+            } else if (e.target.dataset.action === 'rotate') {
+                isRotating = true;
+            } else {
+                isDragging = true;
+                dragOffset = {
+                    x: e.clientX - part.x,
+                    y: e.clientY - part.y
+                };
+            }
+            
+            selectPart(part.id);
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Tool buttons
+            document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    currentTool = btn.dataset.tool;
+                    renderCanvas();
+                });
+            });
+
+            // Zen mode
+            document.getElementById('zenModeBtn').addEventListener('click', () => {
+                isZenMode = !isZenMode;
+                document.body.classList.toggle('zen-mode', isZenMode);
+                document.getElementById('zenModeBtn').classList.toggle('active', isZenMode);
+            });
+
+            // Reset view
+            document.getElementById('resetViewBtn').addEventListener('click', () => {
+                zoom = 1;
+                canvasOffset = { x: 0, y: 0 };
+                updateGridPosition();
+                updateStatusBar();
+            });
+
+            // Delete button
+            document.getElementById('deleteBtn').addEventListener('click', deleteSelected);
+
+            // Add part button
+            document.getElementById('addPartBtn').addEventListener('click', () => {
+                const rect = canvasWrapper.getBoundingClientRect();
+                addPart(partDefinitions[0], rect.width / 2 - 30, rect.height / 2 - 60);
+            });
+
+            // Property inputs
+            [propX, propY].forEach(input => {
+                input.addEventListener('change', updatePartFromProperty);
+            });
+            propRotation.addEventListener('change', updatePartFromProperty);
+            propScale.addEventListener('change', updatePartFromProperty);
+            propName.addEventListener('change', () => {
+                const part = parts.find(p => p.id === selectedPartId);
+                if (part) {
+                    part.name = propName.value;
+                    renderHierarchy();
+                }
+            });
+
+            // Canvas events
+            canvasWrapper.addEventListener('mousedown', handleCanvasMouseDown);
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            canvasWrapper.addEventListener('wheel', handleWheel);
+            canvasWrapper.addEventListener('contextmenu', handleContextMenu);
+
+            // Keyboard shortcuts
+            document.addEventListener('keydown', handleKeyDown);
+
+            // Context menu
+            document.querySelectorAll('.context-menu-item').forEach(item => {
+                item.addEventListener('click', handleContextMenuAction);
+            });
+
+            document.addEventListener('click', () => {
+                contextMenu.style.display = 'none';
+            });
+
+            // Mouse tracking for status bar
+            canvasWrapper.addEventListener('mousemove', (e) => {
+                const rect = canvasWrapper.getBoundingClientRect();
+                const x = Math.round(e.clientX - rect.left - canvasOffset.x);
+                const y = Math.round(e.clientY - rect.top - canvasOffset.y);
+                document.getElementById('statusCoords').textContent = `X: ${x}, Y: ${y}`;
+            });
+        }
+
+        // Handle canvas mouse down
+        function handleCanvasMouseDown(e) {
+            if (e.target === canvasWrapper || e.target === gridBackground) {
+                selectPart(null);
+                isDragging = true;
+                dragOffset = {
+                    x: e.clientX - canvasOffset.x,
+                    y: e.clientY - canvasOffset.y
+                };
+            }
+        }
+
+        // Handle mouse move
+        function handleMouseMove(e) {
+            if (isDragging && selectedPartId && !isResizing && !isRotating) {
+                const part = parts.find(p => p.id === selectedPartId);
+                if (part && e.target.closest('.canvas-part')) {
+                    part.x = e.clientX - dragOffset.x;
+                    part.y = e.clientY - dragOffset.y;
+                    renderCanvas();
+                    updatePropertiesPanel();
+                }
+            } else if (isDragging && !selectedPartId) {
+                // Pan canvas
+                canvasOffset.x = e.clientX - dragOffset.x;
+                canvasOffset.y = e.clientY - dragOffset.y;
+                updateGridPosition();
+                renderCanvas();
+            } else if (isResizing && selectedPartId) {
+                const part = parts.find(p => p.id === selectedPartId);
+                if (part) {
+                    const rect = canvasParts.getBoundingClientRect();
+                    const mouseX = e.clientX - rect.left;
+                    const mouseY = e.clientY - rect.top;
+                    
+                    let newWidth = initialSize.width;
+                    let newHeight = initialSize.height;
+                    let newX = initialPos.x;
+                    let newY = initialPos.y;
+
+                    switch (resizeHandle) {
+                        case 'se':
+                            newWidth = Math.max(20, mouseX - initialPos.x);
+                            newHeight = Math.max(20, mouseY - initialPos.y);
+                            break;
+                        case 'sw':
+                            newWidth = Math.max(20, initialPos.x + initialSize.width - mouseX);
+                            newHeight = Math.max(20, mouseY - initialPos.y);
+                            newX = Math.min(initialPos.x, mouseX);
+                            break;
+                        case 'ne':
+                            newWidth = Math.max(20, mouseX - initialPos.x);
+                            newHeight = Math.max(20, initialPos.y + initialSize.height - mouseY);
+                            newY = Math.min(initialPos.y, mouseY);
+                            break;
+                        case 'nw':
+                            newWidth = Math.max(20, initialPos.x + initialSize.width - mouseX);
+                            newHeight = Math.max(20, initialPos.y + initialSize.height - mouseY);
+                            newX = Math.min(initialPos.x, mouseX);
+                            newY = Math.min(initialPos.y, mouseY);
+                            break;
+                    }
+
+                    part.width = newWidth;
+                    part.height = newHeight;
+                    part.x = newX;
+                    part.y = newY;
+                    part.scale = 100; // Reset scale when resizing
+                    renderCanvas();
+                    updatePropertiesPanel();
+                }
+            } else if (isRotating && selectedPartId) {
+                const part = parts.find(p => p.id === selectedPartId);
+                if (part) {
+                    const rect = canvasParts.getBoundingClientRect();
+                    const centerX = part.x + (part.width * part.scale / 100) / 2;
+                    const centerY = part.y + (part.height * part.scale / 100) / 2;
+                    const angle = Math.atan2(e.clientY - rect.top - centerY, e.clientX - rect.left - centerX);
+                    part.rotation = Math.round(angle * 180 / Math.PI) + 90;
+                    renderCanvas();
+                    updatePropertiesPanel();
+                }
+            }
+        }
+
+        // Handle mouse up
+        function handleMouseUp() {
+            isDragging = false;
+            isResizing = false;
+            isRotating = false;
+            resizeHandle = null;
+        }
+
+        // Handle wheel
+        function handleWheel(e) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            zoom = Math.max(0.1, Math.min(5, zoom * delta));
+            canvasWrapper.style.transform = `scale(${zoom})`;
+            canvasWrapper.style.transformOrigin = 'center center';
+            updateGridPosition();
+            updateStatusBar();
+        }
+
+        // Handle context menu
+        function handleContextMenu(e) {
+            e.preventDefault();
+            const part = e.target.closest('.canvas-part');
+            if (part) {
+                selectPart(part.dataset.id);
+                contextMenu.style.display = 'block';
+                contextMenu.style.left = `${e.clientX}px`;
+                contextMenu.style.top = `${e.clientY}px`;
+            }
+        }
+
+        // Handle context menu action
+        function handleContextMenuAction(e) {
+            const action = e.target.dataset.action;
+            const part = parts.find(p => p.id === selectedPartId);
+            
+            switch (action) {
+                case 'duplicate':
+                    if (part) {
+                        const newPart = addPart(
+                            partDefinitions.find(d => d.id === part.definitionId),
+                            part.x + 20,
+                            part.y + 20
+                        );
+                        newPart.rotation = part.rotation;
+                        newPart.scale = part.scale;
+                    }
+                    break;
+                case 'delete':
+                    deleteSelected();
+                    break;
+                case 'bringToFront':
+                    if (part) part.zIndex = ++zIndexCounter;
+                    renderCanvas();
+                    renderHierarchy();
+                    break;
+                case 'sendToBack':
+                    if (part) part.zIndex = --zIndexCounter;
+                    renderCanvas();
+                    renderHierarchy();
+                    break;
+            }
+            contextMenu.style.display = 'none';
+        }
+
+        // Handle key down
+        function handleKeyDown(e) {
+            switch (e.key.toLowerCase()) {
+                case 'q':
+                    setTool('select');
+                    break;
+                case 'w':
+                    setTool('translate');
+                    break;
+                case 'e':
+                    setTool('rotate');
+                    break;
+                case 'r':
+                    setTool('scale');
+                    break;
+                case 'delete':
+                case 'backspace':
+                    if (document.activeElement.tagName !== 'INPUT') {
+                        deleteSelected();
+                    }
+                    break;
+                case 'escape':
+                    selectPart(null);
+                    break;
+            }
+        }
+
+        // Set tool
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn[data-tool]').forEach(b => {
+                b.classList.toggle('active', b.dataset.tool === tool);
+            });
+            renderCanvas();
+        }
+
+        // Delete selected
+        function deleteSelected() {
+            if (selectedPartId) {
+                parts = parts.filter(p => p.id !== selectedPartId);
+                selectPart(null);
+            }
+        }
+
+        // Update part from property
+        function updatePartFromProperty() {
+            const part = parts.find(p => p.id === selectedPartId);
+            if (part) {
+                part.x = parseFloat(propX.value) || part.x;
+                part.y = parseFloat(propY.value) || part.y;
+                part.rotation = parseFloat(propRotation.value) || 0;
+                part.scale = parseFloat(propScale.value) || 100;
+                renderCanvas();
+            }
+        }
+
+        // Update grid position
+        function updateGridPosition() {
+            gridBackground.style.transform = `translate(${canvasOffset.x % 50}px, ${canvasOffset.y % 50}px)`;
+        }
+
+        // Start the app
+        init();
+    </script>
+</body>
+</html>
