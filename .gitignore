@@ -1,1 +1,1 @@
-Nothing needs to be added to the .gitignore file since only a single HTML file (`editor.html`) was added, which appears to be a source file that should be tracked in version control. There are no build artifacts, dependency directories, temporary files, or other items that should be ignored in the provided changes.
+Nothing needs to be added to .gitignore since the only change is adding a single HTML file (`editor-2d.html`) which is a source/config file and not a build artifact, dependency, or temporary file.
